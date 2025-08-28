@@ -77,13 +77,37 @@ NSApplicationActivationOptions = {
 }
 
 def CFAttributeToPyObject(attrValue):
+    """Convert Core Foundation attribute values to Python objects.
+    
+    Args:
+        attrValue: Core Foundation attribute value to convert
+        
+    Returns:
+        Converted Python object or None if conversion fails
+    """
     def list_helper(list_value):
+        """Helper function to convert CF arrays to Python lists.
+        
+        Args:
+            list_value: Core Foundation array to convert
+            
+        Returns:
+            Python list containing converted items
+        """
         list_builder = []
         for item in list_value:
             list_builder.append(CFAttributeToPyObject(item))
         return list_builder
 
     def number_helper(number_value):
+        """Helper function to convert CF numbers to Python numbers.
+        
+        Args:
+            number_value: Core Foundation number to convert
+            
+        Returns:
+            Python int or float, or None if conversion fails
+        """
         success, int_value = Foundation.CFNumberGetValue(  # type: ignore
             number_value, Foundation.kCFNumberIntType, None  # type: ignore
         )
@@ -98,6 +122,14 @@ def CFAttributeToPyObject(attrValue):
         return None
 
     def axuielement_helper(element_value):
+        """Helper function to handle AX UI elements.
+        
+        Args:
+            element_value: Accessibility UI element to process
+            
+        Returns:
+            The element value unchanged
+        """
         return element_value
 
     cf_attr_type = Foundation.CFGetTypeID(attrValue)  # type: ignore
@@ -131,6 +163,15 @@ def CFAttributeToPyObject(attrValue):
 
 
 def element_attribute(element, attribute):
+    """Get an attribute value from an accessibility element.
+    
+    Args:
+        element: The accessibility element
+        attribute: The attribute name to retrieve
+        
+    Returns:
+        The attribute value or None if not found
+    """
     if attribute == kAXChildrenAttribute:
         err, value = AXUIElementCopyAttributeValues(element, attribute, 0, 999, None)
         if err == kAXErrorSuccess:
@@ -148,6 +189,15 @@ def element_attribute(element, attribute):
 
 
 def element_value(element, type):
+    """Extract a typed value from an accessibility element.
+    
+    Args:
+        element: The accessibility element containing the value
+        type: The expected value type
+        
+    Returns:
+        The extracted value or None if extraction fails
+    """
     err, value = AXValueGetValue(element, type, None)
     if err == True:
         return value
@@ -155,7 +205,18 @@ def element_value(element, type):
 
 
 class UIElement:
+    """Represents a UI element in the accessibility tree with position, size, and hierarchy information."""
+    
     def __init__(self, element, offset_x=0, offset_y=0, max_depth=None, parents_visible_bbox=None):
+        """Initialize a UIElement from an accessibility element.
+        
+        Args:
+            element: The accessibility element to wrap
+            offset_x: X offset for position calculations
+            offset_y: Y offset for position calculations
+            max_depth: Maximum depth to traverse for children
+            parents_visible_bbox: Parent's visible bounding box for clipping
+        """
         self.ax_element = element
         self.content_identifier = ""
         self.identifier = ""
@@ -235,6 +296,11 @@ class UIElement:
         self.calculate_hashes()
 
     def _set_bboxes(self, parents_visible_bbox):
+        """Set bounding box and visible bounding box for the element.
+        
+        Args:
+            parents_visible_bbox: Parent's visible bounding box for intersection calculation
+        """
         if not self.absolute_position or not self.size:
             self.bbox = None
             self.visible_bbox = None
@@ -265,6 +331,17 @@ class UIElement:
             self.visible_bbox = self.bbox
 
     def _get_children(self, element, start_position, offset_x, offset_y):
+        """Get child elements from the accessibility element.
+        
+        Args:
+            element: The parent accessibility element
+            start_position: Starting position for offset calculations
+            offset_x: X offset for child positioning
+            offset_y: Y offset for child positioning
+            
+        Returns:
+            List of UIElement children
+        """
         children = element_attribute(element, kAXChildrenAttribute)
         visible_children = element_attribute(element, kAXVisibleChildrenAttribute)
         found_children = []
@@ -288,10 +365,16 @@ class UIElement:
         return result
 
     def calculate_hashes(self):
+        """Calculate unique identifiers for the element and its content."""
         self.identifier = self.component_hash()
         self.content_identifier = self.children_content_hash(self.children)
 
     def component_hash(self):
+        """Generate a hash identifier for this component based on its properties.
+        
+        Returns:
+            MD5 hash string of component properties
+        """
         if self.position is None or self.size is None:
             return ""
         position_string = f"{self.position.x:.0f};{self.position.y:.0f}"
@@ -304,6 +387,14 @@ class UIElement:
         return self.hash_from_string(position_string + size_string + enabled_string + role_string)
 
     def hash_from_string(self, string):
+        """Generate MD5 hash from a string.
+        
+        Args:
+            string: Input string to hash
+            
+        Returns:
+            MD5 hash hexdigest or empty string if input is None/empty
+        """
         if string is None or string == "":
             return ""
         from hashlib import md5
@@ -311,6 +402,14 @@ class UIElement:
         return md5(string.encode()).hexdigest()
 
     def children_content_hash(self, children):
+        """Generate a hash representing the content and structure of child elements.
+        
+        Args:
+            children: List of child UIElement objects
+            
+        Returns:
+            Combined hash of children content and structure
+        """
         if len(children) == 0:
             return ""
         all_content_hashes = []
@@ -326,7 +425,20 @@ class UIElement:
         return self.hash_from_string(content_hash.join(content_structure_hash))
 
     def to_dict(self):
+        """Convert the UIElement to a dictionary representation.
+        
+        Returns:
+            Dictionary containing all element properties and children
+        """
         def children_to_dict(children):
+            """Convert list of children to dictionary format.
+            
+            Args:
+                children: List of UIElement children to convert
+                
+            Returns:
+                List of dictionaries representing the children
+            """
             result = []
             for child in children:
                 result.append(child.to_dict())
@@ -375,6 +487,12 @@ from AppKit import NSWorkspace, NSRunningApplication
 from pathlib import Path
 
 def get_all_windows_zorder():
+    """Get all windows in the system with their z-order information.
+    
+    Returns:
+        List of window dictionaries sorted by z-index, containing window properties
+        like id, name, pid, owner, bounds, layer, and opacity
+    """
     window_list = Quartz.CGWindowListCopyWindowInfo(
         Quartz.kCGWindowListOptionOnScreenOnly,
         Quartz.kCGNullWindowID
@@ -425,6 +543,14 @@ def get_all_windows_zorder():
     return windows
 
 def get_app_info(app):
+    """Extract information from an NSRunningApplication object.
+    
+    Args:
+        app: NSRunningApplication instance
+        
+    Returns:
+        Dictionary containing app name, bundle ID, PID, and status flags
+    """
     return {
         "name": app.localizedName(),
         "bundle_id": app.bundleIdentifier(),
@@ -435,6 +561,14 @@ def get_app_info(app):
     }
 
 def get_menubar_items(active_app_pid=None):
+    """Get menubar items for the active application.
+    
+    Args:
+        active_app_pid: Process ID of the active application, or None to use frontmost app
+        
+    Returns:
+        List of menubar item dictionaries with title, bounds, index, and app_pid
+    """
     menubar_items = []
     if active_app_pid is None:
         frontmost_app = NSWorkspace.sharedWorkspace().frontmostApplication()
@@ -473,6 +607,12 @@ def get_menubar_items(active_app_pid=None):
     return menubar_items
 
 def get_dock_items():
+    """Get all items in the macOS Dock.
+    
+    Returns:
+        List of dock item dictionaries with title, description, bounds, index, 
+        type, role, and subrole information
+    """
     dock_items = []
     dock_pid = None
     running_apps = NSWorkspace.sharedWorkspace().runningApplications()
@@ -538,7 +678,14 @@ def get_dock_items():
     return dock_items
 
 class MacOSAccessibilityHandler(BaseAccessibilityHandler):
+    """Handler for macOS accessibility features and UI element inspection."""
+    
     def get_desktop_state(self):
+        """Get the current state of the desktop including windows, apps, menubar, and dock.
+        
+        Returns:
+            Dictionary containing applications, windows, menubar_items, and dock_items
+        """
         windows = [w for w in get_all_windows_zorder() if w.get("is_on_screen")]
         running_apps = self.get_running_apps()
         applications = []
@@ -586,7 +733,14 @@ class MacOSAccessibilityHandler(BaseAccessibilityHandler):
         }
 
     def get_application_windows(self, pid: int):
-        """Get all windows for a specific application."""
+        """Get all windows for a specific application.
+        
+        Args:
+            pid: Process ID of the application
+            
+        Returns:
+            List of accessibility window elements or empty list if none found
+        """
         try:
             app = AXUIElementCreateApplication(pid)
             err, windows = AXUIElementCopyAttributeValue(app, kAXWindowsAttribute, None)
@@ -598,7 +752,11 @@ class MacOSAccessibilityHandler(BaseAccessibilityHandler):
             return []
 
     def get_all_windows(self):
-        """Get all visible windows in the system."""
+        """Get all visible windows in the system.
+        
+        Returns:
+            List of window dictionaries with app information and window details
+        """
         try:
             windows = []
             running_apps = self.get_running_apps()
@@ -632,16 +790,38 @@ class MacOSAccessibilityHandler(BaseAccessibilityHandler):
             return []
 
     def get_running_apps(self):
+        """Get all currently running applications.
+        
+        Returns:
+            List of NSRunningApplication objects
+        """
         # From NSWorkspace.runningApplications docs: https://developer.apple.com/documentation/appkit/nsworkspace/runningapplications
-        # "Similar to the NSRunningApplication class’s properties, this property will only change when the main run loop runs in a common mode"
+        # "Similar to the NSRunningApplication class's properties, this property will only change when the main run loop runs in a common mode"
         # So we need to run the main run loop to get the latest running applications
         Foundation.CFRunLoopRunInMode(Foundation.kCFRunLoopDefaultMode, 0.1, False)  # type: ignore
         return NSWorkspace.sharedWorkspace().runningApplications()
 
     def get_ax_attribute(self, element, attribute):
+        """Get an accessibility attribute from an element.
+        
+        Args:
+            element: The accessibility element
+            attribute: The attribute name to retrieve
+            
+        Returns:
+            The attribute value or None if not found
+        """
         return element_attribute(element, attribute)
 
     def serialize_node(self, element):
+        """Create a serializable dictionary representation of an accessibility element.
+        
+        Args:
+            element: The accessibility element to serialize
+            
+        Returns:
+            Dictionary containing element properties like role, title, value, position, and size
+        """
         # Create a serializable dictionary representation of an accessibility element
         result = {}
 
@@ -669,7 +849,12 @@ class MacOSAccessibilityHandler(BaseAccessibilityHandler):
 
         return result
 
-    async def get_accessibility_tree(self) -> Dict[str, Any]:        
+    async def get_accessibility_tree(self) -> Dict[str, Any]:
+        """Get the complete accessibility tree for the current desktop state.
+        
+        Returns:
+            Dictionary containing success status and desktop state information
+        """        
         try:
             desktop_state = self.get_desktop_state()
             return {
@@ -683,10 +868,28 @@ class MacOSAccessibilityHandler(BaseAccessibilityHandler):
     async def find_element(
         self, role: Optional[str] = None, title: Optional[str] = None, value: Optional[str] = None
     ) -> Dict[str, Any]:
+        """Find an accessibility element matching the specified criteria.
+        
+        Args:
+            role: The accessibility role to match (optional)
+            title: The title to match (optional)
+            value: The value to match (optional)
+            
+        Returns:
+            Dictionary containing success status and the found element or error message
+        """
         try:
             system = AXUIElementCreateSystemWide()
 
             def match_element(element):
+                """Check if an element matches the search criteria.
+                
+                Args:
+                    element: The accessibility element to check
+                    
+                Returns:
+                    True if element matches all specified criteria, False otherwise
+                """
                 if role and self.get_ax_attribute(element, kAXRoleAttribute) != role:
                     return False
                 if title and self.get_ax_attribute(element, kAXTitleAttribute) != title:
@@ -696,6 +899,14 @@ class MacOSAccessibilityHandler(BaseAccessibilityHandler):
                 return True
 
             def search_tree(element):
+                """Recursively search the accessibility tree for matching elements.
+                
+                Args:
+                    element: The accessibility element to search from
+                    
+                Returns:
+                    Serialized element dictionary if match found, None otherwise
+                """
                 if match_element(element):
                     return self.serialize_node(element)
 
@@ -714,11 +925,23 @@ class MacOSAccessibilityHandler(BaseAccessibilityHandler):
             return {"success": False, "error": str(e)}
 
 class MacOSAutomationHandler(BaseAutomationHandler):
+    """Handler for macOS automation including mouse, keyboard, and screen operations."""
+    
     # Mouse Actions
     mouse = MouseController()
     keyboard = KeyboardController()
     
     async def mouse_down(self, x: Optional[int] = None, y: Optional[int] = None, button: str = "left") -> Dict[str, Any]:
+        """Press and hold a mouse button at the specified coordinates.
+        
+        Args:
+            x: X coordinate (optional, uses current position if None)
+            y: Y coordinate (optional, uses current position if None)
+            button: Mouse button to press ("left", "right", or "middle")
+            
+        Returns:
+            Dictionary containing success status and error message if failed
+        """
         try:
             if x is not None and y is not None:
                 self.mouse.position = (x, y)
@@ -728,6 +951,16 @@ class MacOSAutomationHandler(BaseAutomationHandler):
             return {"success": False, "error": str(e)}
 
     async def mouse_up(self, x: Optional[int] = None, y: Optional[int] = None, button: str = "left") -> Dict[str, Any]:
+        """Release a mouse button at the specified coordinates.
+        
+        Args:
+            x: X coordinate (optional, uses current position if None)
+            y: Y coordinate (optional, uses current position if None)
+            button: Mouse button to release ("left", "right", or "middle")
+            
+        Returns:
+            Dictionary containing success status and error message if failed
+        """
         try:
             if x is not None and y is not None:
                 self.mouse.position = (x, y)
@@ -737,6 +970,15 @@ class MacOSAutomationHandler(BaseAutomationHandler):
             return {"success": False, "error": str(e)}
 
     async def left_click(self, x: Optional[int] = None, y: Optional[int] = None) -> Dict[str, Any]:
+        """Perform a left mouse click at the specified coordinates.
+        
+        Args:
+            x: X coordinate (optional, uses current position if None)
+            y: Y coordinate (optional, uses current position if None)
+            
+        Returns:
+            Dictionary containing success status and error message if failed
+        """
         try:
             if x is not None and y is not None:
                 self.mouse.position = (x, y)
@@ -746,6 +988,15 @@ class MacOSAutomationHandler(BaseAutomationHandler):
             return {"success": False, "error": str(e)}
 
     async def right_click(self, x: Optional[int] = None, y: Optional[int] = None) -> Dict[str, Any]:
+        """Perform a right mouse click at the specified coordinates.
+        
+        Args:
+            x: X coordinate (optional, uses current position if None)
+            y: Y coordinate (optional, uses current position if None)
+            
+        Returns:
+            Dictionary containing success status and error message if failed
+        """
         try:
             if x is not None and y is not None:
                 self.mouse.position = (x, y)
@@ -757,6 +1008,15 @@ class MacOSAutomationHandler(BaseAutomationHandler):
     async def double_click(
         self, x: Optional[int] = None, y: Optional[int] = None
     ) -> Dict[str, Any]:
+        """Perform a double left mouse click at the specified coordinates.
+        
+        Args:
+            x: X coordinate (optional, uses current position if None)
+            y: Y coordinate (optional, uses current position if None)
+            
+        Returns:
+            Dictionary containing success status and error message if failed
+        """
         try:
             if x is not None and y is not None:
                 self.mouse.position = (x, y)
@@ -766,6 +1026,15 @@ class MacOSAutomationHandler(BaseAutomationHandler):
             return {"success": False, "error": str(e)}
 
     async def move_cursor(self, x: int, y: int) -> Dict[str, Any]:
+        """Move the mouse cursor to the specified coordinates.
+        
+        Args:
+            x: Target X coordinate
+            y: Target Y coordinate
+            
+        Returns:
+            Dictionary containing success status and error message if failed
+        """
         try:
             self.mouse.position = (x, y)
             return {"success": True}
@@ -775,6 +1044,17 @@ class MacOSAutomationHandler(BaseAutomationHandler):
     async def drag_to(
         self, x: int, y: int, button: str = "left", duration: float = 0.5
     ) -> Dict[str, Any]:
+        """Drag from current position to target coordinates.
+        
+        Args:
+            x: Target X coordinate
+            y: Target Y coordinate
+            button: Mouse button to use for dragging ("left", "right", or "middle")
+            duration: Duration of the drag operation in seconds
+            
+        Returns:
+            Dictionary containing success status and error message if failed
+        """
         try:
             btn = Button.left if button == "left" else Button.right if button == "right" else Button.middle
             # Press
@@ -801,6 +1081,16 @@ class MacOSAutomationHandler(BaseAutomationHandler):
     async def drag(
         self, path: List[Tuple[int, int]], button: str = "left", duration: float = 0.5
     ) -> Dict[str, Any]:
+        """Drag the mouse along a specified path of coordinates.
+        
+        Args:
+            path: List of (x, y) coordinate tuples defining the drag path
+            button: Mouse button to use for dragging ("left", "right", or "middle")
+            duration: Total duration of the drag operation in seconds
+            
+        Returns:
+            Dictionary containing success status and error message if failed
+        """
         try:
             if not path or len(path) < 2:
                 return {"success": False, "error": "Path must contain at least 2 points"}
@@ -823,6 +1113,14 @@ class MacOSAutomationHandler(BaseAutomationHandler):
 
     # Keyboard Actions
     async def key_down(self, key: str) -> Dict[str, Any]:
+        """Press and hold a keyboard key.
+        
+        Args:
+            key: Key name to press (using pyautogui key names)
+            
+        Returns:
+            Dictionary containing success status and error message if failed
+        """
         try:
             # use pyautogui for their key names
             pyautogui.keyDown(key)
@@ -831,6 +1129,14 @@ class MacOSAutomationHandler(BaseAutomationHandler):
             return {"success": False, "error": str(e)}
     
     async def key_up(self, key: str) -> Dict[str, Any]:
+        """Release a keyboard key.
+        
+        Args:
+            key: Key name to release (using pyautogui key names)
+            
+        Returns:
+            Dictionary containing success status and error message if failed
+        """
         try:
             # use pyautogui for their key names
             pyautogui.keyUp(key)
@@ -839,6 +1145,14 @@ class MacOSAutomationHandler(BaseAutomationHandler):
             return {"success": False, "error": str(e)}
     
     async def type_text(self, text: str) -> Dict[str, Any]:
+        """Type text using the keyboard with Unicode support.
+        
+        Args:
+            text: Text string to type
+            
+        Returns:
+            Dictionary containing success status and error message if failed
+        """
         try:
             # use pynput for Unicode support
             self.keyboard.type(text)
@@ -847,6 +1161,14 @@ class MacOSAutomationHandler(BaseAutomationHandler):
             return {"success": False, "error": str(e)}
 
     async def press_key(self, key: str) -> Dict[str, Any]:
+        """Press and release a keyboard key.
+        
+        Args:
+            key: Key name to press (using pyautogui key names)
+            
+        Returns:
+            Dictionary containing success status and error message if failed
+        """
         try:
             # use pyautogui for their key names
             pyautogui.press(key)
@@ -855,6 +1177,14 @@ class MacOSAutomationHandler(BaseAutomationHandler):
             return {"success": False, "error": str(e)}
 
     async def hotkey(self, keys: List[str]) -> Dict[str, Any]:
+        """Press a combination of keys simultaneously.
+        
+        Args:
+            keys: List of key names to press together (using pyautogui key names)
+            
+        Returns:
+            Dictionary containing success status and error message if failed
+        """
         try:
             # use pyautogui for their key names
             pyautogui.hotkey(*keys)
@@ -864,6 +1194,15 @@ class MacOSAutomationHandler(BaseAutomationHandler):
 
     # Scrolling Actions
     async def scroll(self, x: int, y: int) -> Dict[str, Any]:
+        """Scroll the mouse wheel in the specified direction.
+        
+        Args:
+            x: Horizontal scroll amount
+            y: Vertical scroll amount (positive for up, negative for down)
+            
+        Returns:
+            Dictionary containing success status and error message if failed
+        """
         try:
             self.mouse.scroll(x, y)
             return {"success": True}
@@ -871,6 +1210,14 @@ class MacOSAutomationHandler(BaseAutomationHandler):
             return {"success": False, "error": str(e)}
     
     async def scroll_down(self, clicks: int = 1) -> Dict[str, Any]:
+        """Scroll down by the specified number of clicks.
+        
+        Args:
+            clicks: Number of scroll clicks to perform
+            
+        Returns:
+            Dictionary containing success status and error message if failed
+        """
         try:
             self.mouse.scroll(0, -clicks)
             return {"success": True}
@@ -878,6 +1225,14 @@ class MacOSAutomationHandler(BaseAutomationHandler):
             return {"success": False, "error": str(e)}
 
     async def scroll_up(self, clicks: int = 1) -> Dict[str, Any]:
+        """Scroll up by the specified number of clicks.
+        
+        Args:
+            clicks: Number of scroll clicks to perform
+            
+        Returns:
+            Dictionary containing success status and error message if failed
+        """
         try:
             self.mouse.scroll(0, clicks)
             return {"success": True}
@@ -886,6 +1241,11 @@ class MacOSAutomationHandler(BaseAutomationHandler):
 
     # Screen Actions
     async def screenshot(self) -> Dict[str, Any]:
+        """Capture a screenshot of the current screen.
+        
+        Returns:
+            Dictionary containing success status and base64-encoded image data or error message
+        """
         try:
             from PIL import Image
 
@@ -902,6 +1262,11 @@ class MacOSAutomationHandler(BaseAutomationHandler):
             return {"success": False, "error": f"Screenshot error: {str(e)}"}
 
     async def get_screen_size(self) -> Dict[str, Any]:
+        """Get the dimensions of the current screen.
+        
+        Returns:
+            Dictionary containing success status and screen size or error message
+        """
         try:
             size = pyautogui.size()
             return {"success": True, "size": {"width": size.width, "height": size.height}}
@@ -909,6 +1274,11 @@ class MacOSAutomationHandler(BaseAutomationHandler):
             return {"success": False, "error": str(e)}
 
     async def get_cursor_position(self) -> Dict[str, Any]:
+        """Get the current position of the mouse cursor.
+        
+        Returns:
+            Dictionary containing success status and cursor position or error message
+        """
         try:
             x, y = self.mouse.position
             return {"success": True, "position": {"x": x, "y": y}}
@@ -917,6 +1287,11 @@ class MacOSAutomationHandler(BaseAutomationHandler):
 
     # Clipboard Actions
     async def copy_to_clipboard(self) -> Dict[str, Any]:
+        """Get the current content of the system clipboard.
+        
+        Returns:
+            Dictionary containing success status and clipboard content or error message
+        """
         try:
             import pyperclip
 
@@ -926,6 +1301,14 @@ class MacOSAutomationHandler(BaseAutomationHandler):
             return {"success": False, "error": str(e)}
 
     async def set_clipboard(self, text: str) -> Dict[str, Any]:
+        """Set the content of the system clipboard.
+        
+        Args:
+            text: Text to copy to the clipboard
+            
+        Returns:
+            Dictionary containing success status and error message if failed
+        """
         try:
             import pyperclip
 
@@ -935,7 +1318,14 @@ class MacOSAutomationHandler(BaseAutomationHandler):
             return {"success": False, "error": str(e)}
 
     async def run_command(self, command: str) -> Dict[str, Any]:
-        """Run a shell command and return its output."""
+        """Run a shell command and return its output.
+        
+        Args:
+            command: Shell command to execute
+            
+        Returns:
+            Dictionary containing success status, stdout, stderr, and return code
+        """
         try:
             # Create subprocess
             process = await asyncio.create_subprocess_shell(

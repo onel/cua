@@ -20,6 +20,12 @@ logger = logging.getLogger(__name__)
 automation_handler = MacOSAutomationHandler()
 
 class Diorama:
+    """Virtual desktop manager that provides automation capabilities for macOS applications.
+    
+    Manages application windows and provides an interface for taking screenshots,
+    mouse interactions, keyboard input, and coordinate transformations between
+    screenshot space and screen space.
+    """
     _scheduler_queue = None
     _scheduler_task = None
     _loop = None
@@ -27,6 +33,14 @@ class Diorama:
 
     @classmethod
     def create_from_apps(cls, *args) -> DioramaComputer:
+        """Create a DioramaComputer instance from a list of application names.
+        
+        Args:
+            *args: Variable number of application names to include in the desktop
+            
+        Returns:
+            DioramaComputer: A computer interface for the specified applications
+        """
         cls._ensure_scheduler()
         return cls(args).computer
 
@@ -34,6 +48,11 @@ class Diorama:
     _cursor_positions = {}
     
     def __init__(self, app_list):
+        """Initialize a Diorama instance for the specified applications.
+        
+        Args:
+            app_list: List of application names to manage
+        """
         self.app_list = app_list
         self.interface = self.Interface(self)
         self.computer = DioramaComputer(self)
@@ -48,6 +67,10 @@ class Diorama:
 
     @classmethod
     def _ensure_scheduler(cls):
+        """Ensure the async scheduler loop is running.
+        
+        Creates and starts the scheduler task if it hasn't been started yet.
+        """
         if not cls._scheduler_started:
             logger.info("Starting Diorama scheduler loop…")
             cls._scheduler_queue = asyncio.Queue()
@@ -57,6 +80,11 @@ class Diorama:
 
     @classmethod
     async def _scheduler_loop(cls):
+        """Main scheduler loop that processes automation commands.
+        
+        Continuously processes commands from the scheduler queue, handling
+        screenshots, mouse actions, keyboard input, and scrolling operations.
+        """
         while True:
             cmd = await cls._scheduler_queue.get()
             action = cmd.get("action")
@@ -144,13 +172,33 @@ class Diorama:
                         future.set_exception(e)
 
     class Interface():
+        """Interface for interacting with the virtual desktop.
+        
+        Provides methods for taking screenshots, mouse interactions, keyboard input,
+        and coordinate transformations between screenshot and screen coordinates.
+        """
+        
         def __init__(self, diorama):
+            """Initialize the interface with a reference to the parent Diorama instance.
+            
+            Args:
+                diorama: The parent Diorama instance
+            """
             self._diorama = diorama
             
             self._scene_hitboxes = []
             self._scene_size = None
 
         async def _send_cmd(self, action, arguments=None):
+            """Send a command to the scheduler queue.
+            
+            Args:
+                action (str): The action to perform
+                arguments (dict, optional): Arguments for the action
+                
+            Returns:
+                The result of the command execution
+            """
             Diorama._ensure_scheduler()
             loop = asyncio.get_event_loop()
             future = loop.create_future()
@@ -167,6 +215,14 @@ class Diorama:
                 return None
 
         async def screenshot(self, as_bytes: bool = True) -> Union[str, Image.Image]:
+            """Take a screenshot of the managed applications.
+            
+            Args:
+                as_bytes (bool): If True, return base64-encoded bytes; if False, return PIL Image
+                
+            Returns:
+                Union[str, Image.Image]: Base64-encoded PNG bytes or PIL Image object
+            """
             import base64
             result, img = await self._send_cmd("screenshot")
             self._scene_hitboxes = result.get("hitboxes", [])
@@ -184,6 +240,12 @@ class Diorama:
                 return img
 
         async def left_click(self, x, y):
+            """Perform a left mouse click at the specified coordinates.
+            
+            Args:
+                x (int): X coordinate in screenshot space (or None to use last position)
+                y (int): Y coordinate in screenshot space (or None to use last position)
+            """
             # Get last cursor position for this app_list hash
             app_list_hash = hash(tuple(sorted(self._diorama.app_list)))
             last_pos = Diorama._cursor_positions.get(app_list_hash, (0, 0))
@@ -195,6 +257,12 @@ class Diorama:
             await self._send_cmd("left_click", {"x": sx, "y": sy})
 
         async def right_click(self, x, y):
+            """Perform a right mouse click at the specified coordinates.
+            
+            Args:
+                x (int): X coordinate in screenshot space (or None to use last position)
+                y (int): Y coordinate in screenshot space (or None to use last position)
+            """
             # Get last cursor position for this app_list hash
             app_list_hash = hash(tuple(sorted(self._diorama.app_list)))
             last_pos = Diorama._cursor_positions.get(app_list_hash, (0, 0))
@@ -206,6 +274,12 @@ class Diorama:
             await self._send_cmd("right_click", {"x": sx, "y": sy})
 
         async def double_click(self, x, y):
+            """Perform a double mouse click at the specified coordinates.
+            
+            Args:
+                x (int): X coordinate in screenshot space (or None to use last position)
+                y (int): Y coordinate in screenshot space (or None to use last position)
+            """
             # Get last cursor position for this app_list hash
             app_list_hash = hash(tuple(sorted(self._diorama.app_list)))
             last_pos = Diorama._cursor_positions.get(app_list_hash, (0, 0))
@@ -217,6 +291,12 @@ class Diorama:
             await self._send_cmd("double_click", {"x": sx, "y": sy})
 
         async def move_cursor(self, x, y):
+            """Move the mouse cursor to the specified coordinates.
+            
+            Args:
+                x (int): X coordinate in screenshot space (or None to use last position)
+                y (int): Y coordinate in screenshot space (or None to use last position)
+            """
             # Get last cursor position for this app_list hash
             app_list_hash = hash(tuple(sorted(self._diorama.app_list)))
             last_pos = Diorama._cursor_positions.get(app_list_hash, (0, 0))
@@ -228,6 +308,13 @@ class Diorama:
             await self._send_cmd("move_cursor", {"x": sx, "y": sy})
 
         async def drag_to(self, x, y, duration=0.5):
+            """Drag the mouse from current position to the specified coordinates.
+            
+            Args:
+                x (int): X coordinate in screenshot space (or None to use last position)
+                y (int): Y coordinate in screenshot space (or None to use last position)
+                duration (float): Duration of the drag operation in seconds
+            """
             # Get last cursor position for this app_list hash
             app_list_hash = hash(tuple(sorted(self._diorama.app_list)))
             last_pos = Diorama._cursor_positions.get(app_list_hash, (0, 0))
@@ -239,18 +326,43 @@ class Diorama:
             await self._send_cmd("drag_to", {"x": sx, "y": sy, "duration": duration})
 
         async def get_cursor_position(self):
+            """Get the current cursor position in screen coordinates.
+            
+            Returns:
+                tuple: (x, y) coordinates of the cursor in screen space
+            """
             return await self._send_cmd("get_cursor_position")
 
         async def type_text(self, text):
+            """Type the specified text using the keyboard.
+            
+            Args:
+                text (str): The text to type
+            """
             await self._send_cmd("type_text", {"text": text})
 
         async def press_key(self, key):
+            """Press a single key on the keyboard.
+            
+            Args:
+                key (str): The key to press
+            """
             await self._send_cmd("press_key", {"key": key})
 
         async def hotkey(self, keys):
+            """Press a combination of keys simultaneously.
+            
+            Args:
+                keys (list): List of keys to press together
+            """
             await self._send_cmd("hotkey", {"keys": list(keys)})
 
         async def scroll_up(self, clicks: int = 1):
+            """Scroll up at the current cursor position.
+            
+            Args:
+                clicks (int): Number of scroll clicks to perform
+            """
             # Get last cursor position for this app_list hash
             app_list_hash = hash(tuple(sorted(self._diorama.app_list)))
             last_pos = Diorama._cursor_positions.get(app_list_hash, (0, 0))
@@ -259,6 +371,11 @@ class Diorama:
             await self._send_cmd("scroll_up", {"clicks": clicks, "x": x, "y": y})
 
         async def scroll_down(self, clicks: int = 1):
+            """Scroll down at the current cursor position.
+            
+            Args:
+                clicks (int): Number of scroll clicks to perform
+            """
             # Get last cursor position for this app_list hash
             app_list_hash = hash(tuple(sorted(self._diorama.app_list)))
             last_pos = Diorama._cursor_positions.get(app_list_hash, (0, 0))
@@ -267,6 +384,11 @@ class Diorama:
             await self._send_cmd("scroll_down", {"clicks": clicks, "x": x, "y": y})
 
         async def get_screen_size(self) -> dict[str, int]:
+            """Get the size of the screenshot area.
+            
+            Returns:
+                dict[str, int]: Dictionary with 'width' and 'height' keys
+            """
             if not self._scene_size:
                 await self.screenshot()
             return { "width": self._scene_size[0], "height": self._scene_size[1] }
@@ -348,6 +470,7 @@ import pyautogui
 import time
 
 async def main():
+    """Main function demonstrating Diorama usage with multiple desktops and mouse tracking."""
     desktop1 = Diorama.create_from_apps(["Discord", "Notes"])
     desktop2 = Diorama.create_from_apps(["Terminal"])
 

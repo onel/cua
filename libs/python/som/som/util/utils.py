@@ -13,11 +13,32 @@ logger = logging.getLogger(__name__)
 
 
 class TimeoutException(Exception):
+    """Exception raised when an operation times out.
+    
+    This exception is used to signal that a timeout has occurred during
+    OCR processing or other time-sensitive operations.
+    """
     pass
 
 
 @contextmanager
 def timeout(seconds):
+    """Context manager that enforces a timeout on operations.
+    
+    Args:
+        seconds (int): Maximum number of seconds to allow the operation to run
+        
+    Yields:
+        None: Control is yielded to the wrapped code block
+        
+    Raises:
+        TimeoutException: If the operation exceeds the specified timeout
+        
+    Example:
+        with timeout(5):
+            # Code that should complete within 5 seconds
+            long_running_operation()
+    """
     def timeout_handler(signum, frame):
         logger.warning(f"OCR process timed out after {seconds} seconds")
         raise TimeoutException("OCR processing timed out")
@@ -161,14 +182,18 @@ def check_ocr_box(
 
 
 def get_xywh(box):
-    """
-    Convert a bounding box to xywh format (x, y, width, height).
+    """Convert a bounding box to xywh format (x, y, width, height).
 
     Args:
-        box: Bounding box coordinates (various formats supported)
+        box: Bounding box coordinates in various formats. Can be:
+            - List of 4 numbers (x, y, w, h) or (x1, y1, x2, y2)
+            - List of 2 coordinate pairs [[x1,y1],[x2,y2]]
+            - List of coordinate points from OCR engines
 
     Returns:
-        Tuple of (x, y, width, height)
+        tuple: A tuple of (x, y, width, height) where:
+            - x, y are the top-left corner coordinates
+            - width, height are the dimensions of the bounding box
     """
     # Handle different input formats
     if len(box) == 4:
@@ -195,14 +220,18 @@ def get_xywh(box):
 
 
 def get_xyxy(box):
-    """
-    Convert a bounding box to xyxy format (x1, y1, x2, y2).
+    """Convert a bounding box to xyxy format (x1, y1, x2, y2).
 
     Args:
-        box: Bounding box coordinates (various formats supported)
+        box: Bounding box coordinates in various formats. Can be:
+            - List of 4 numbers (x, y, w, h) or (x1, y1, x2, y2)
+            - List of 2 coordinate pairs [[x1,y1],[x2,y2]]
+            - List of coordinate points from OCR engines
 
     Returns:
-        Tuple of (x1, y1, x2, y2)
+        tuple: A tuple of (x1, y1, x2, y2) where:
+            - x1, y1 are the top-left corner coordinates
+            - x2, y2 are the bottom-right corner coordinates
     """
     # Get xywh first, then convert to xyxy
     x, y, w, h = get_xywh(box)

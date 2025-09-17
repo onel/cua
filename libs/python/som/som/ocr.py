@@ -12,11 +12,27 @@ logger = logging.getLogger(__name__)
 
 
 class TimeoutException(Exception):
+    """Exception raised when an OCR operation exceeds the specified timeout duration."""
     pass
 
 
 @contextmanager
 def timeout(seconds: int):
+    """Context manager that enforces a timeout for operations using SIGALRM.
+    
+    Args:
+        seconds: Maximum number of seconds to allow the operation to run
+        
+    Yields:
+        None: Context for the timed operation
+        
+    Raises:
+        TimeoutException: If the operation exceeds the specified timeout
+        
+    Note:
+        Only works in the main thread due to signal limitations. In non-main threads,
+        the timeout is disabled and a warning is logged.
+    """
     import threading
     
     # Check if we're in the main thread
@@ -42,12 +58,21 @@ def timeout(seconds: int):
 
 
 class OCRProcessor:
-    """Class for handling OCR text detection."""
+    """Handles optical character recognition (OCR) text detection using EasyOCR.
+    
+    This class provides text detection capabilities for images, automatically selecting
+    the best available device (CUDA, MPS, or CPU) and managing a shared EasyOCR reader
+    instance for efficiency.
+    """
 
     _shared_reader = None  # Class-level shared reader instance
 
     def __init__(self):
-        """Initialize the OCR processor."""
+        """Initialize the OCR processor with optimal device selection.
+        
+        Automatically detects and configures the best available computing device
+        (CUDA GPU, Apple MPS, or CPU) for OCR processing.
+        """
         self.reader = None
         # Determine best available device
         self.device = "cpu"
@@ -62,9 +87,13 @@ class OCRProcessor:
         logger.info(f"OCR processor initialized with device: {self.device}")
 
     def _ensure_reader(self):
-        """Ensure EasyOCR reader is initialized.
+        """Initialize or retrieve the EasyOCR reader instance.
 
-        Uses a class-level cached reader to avoid reinitializing on every instance.
+        Uses a class-level cached reader to avoid reinitializing on every instance,
+        improving performance when multiple OCRProcessor instances are used.
+        
+        Raises:
+            RuntimeError: If EasyOCR initialization fails
         """
         # First check if we already have a class-level reader
         if OCRProcessor._shared_reader is not None:
@@ -98,15 +127,28 @@ class OCRProcessor:
     def detect_text(
         self, image: Image.Image, confidence_threshold: float = 0.5, timeout_seconds: int = 5
     ) -> List[Dict[str, Any]]:
-        """Detect text in an image using EasyOCR.
+        """Detect and extract text from an image using EasyOCR.
+
+        Processes the input image to identify text regions, returning normalized
+        bounding boxes and confidence scores for detected text elements.
 
         Args:
-            image: PIL Image to process
-            confidence_threshold: Minimum confidence for text detection
-            timeout_seconds: Maximum time to wait for OCR
+            image: PIL Image object to process for text detection
+            confidence_threshold: Minimum confidence score (0.0-1.0) for including
+                detected text in results
+            timeout_seconds: Maximum time in seconds to wait for OCR processing
+                before timing out
 
         Returns:
-            List of text detection dictionaries
+            List of dictionaries containing detected text information. Each dictionary
+            includes:
+            - type: Always "text" for text detections
+            - bbox: Normalized bounding box coordinates [x1, y1, x2, y2] (0.0-1.0)
+            - content: The detected text string
+            - confidence: Confidence score for the detection
+            - interactivity: Always False for text elements
+            
+            Returns empty list if OCR fails or times out.
         """
         try:
             # Try to initialize reader, catch any exceptions

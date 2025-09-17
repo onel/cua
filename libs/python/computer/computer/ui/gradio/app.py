@@ -36,8 +36,15 @@ TASK_EXAMPLES = [
     }
 ]
 
-# Generate random shopping list and save to desktop using computer interface
 async def create_shopping_list_file(computer):
+    """Generate random shopping list and save to desktop using computer interface.
+    
+    Args:
+        computer: Computer interface instance to use for file operations
+        
+    Returns:
+        str: Path to the created shopping list file
+    """
     items = ["Milk", "Eggs", "Bread", "Apples", "Bananas", "Chicken", "Rice", 
              "Cereal", "Coffee", "Cheese", "Pasta", "Tomatoes", "Potatoes", 
              "Onions", "Carrots", "Ice Cream", "Yogurt", "Cookies"]
@@ -85,8 +92,12 @@ RANDOM_WORDS = ["apple", "banana", "cherry", "dolphin", "elephant", "forest",
                 "sunflower", "tiger", "umbrella", "volcano", "waterfall", "xylophone", 
                 "yellow", "zebra"]
 
-# Generate a random demo name with 3 words
 def generate_random_demo_name():
+    """Generate a random demo name with 3 words.
+    
+    Returns:
+        str: Random demo name composed of 3 words separated by spaces
+    """
     return " ".join(random.sample(RANDOM_WORDS, 3))
 
 # Global session ID for tracking this run
@@ -106,7 +117,14 @@ OUTPUT_DIR = "examples/output"
 SESSION_DIR = os.path.join(OUTPUT_DIR, "sessions")
 
 def load_all_sessions(with_images=False):
-    """Load and concatenate all session datasets into a single Dataset"""
+    """Load and concatenate all session datasets into a single Dataset.
+    
+    Args:
+        with_images (bool): Whether to include image data in the loaded datasets
+        
+    Returns:
+        Dataset or None: Combined dataset of all sessions, or None if no sessions found
+    """
     try:
         # Get all session folders
         if not os.path.exists(SESSION_DIR):
@@ -129,6 +147,14 @@ def load_all_sessions(with_images=False):
                 
                 # Process the messages from tool_call_logs
                 def process_messages(example):
+                    """Process messages from tool call logs into formatted text.
+                    
+                    Args:
+                        example: Dataset example containing tool_calls data
+                        
+                    Returns:
+                        dict: Updated example with processed messages and source folder
+                    """
                     messages_text = []
                     current_role = None
                     
@@ -180,7 +206,11 @@ def load_all_sessions(with_images=False):
         return None
 
 def get_existing_tags():
-    """Extract all existing tags from saved demonstrations"""
+    """Extract all existing tags from saved demonstrations.
+    
+    Returns:
+        tuple: (list of unique tags, list of unique tags) - returned twice for compatibility
+    """
     all_sessions = load_all_sessions()
     if all_sessions is None:
         return [], []
@@ -201,8 +231,11 @@ def get_existing_tags():
     return unique_tags, unique_tags
 
 def get_sessions_data():
-    """Load all sessions dataset"""
-
+    """Load all sessions dataset and return as DataFrame.
+    
+    Returns:
+        pd.DataFrame: DataFrame containing session data with selected columns
+    """
     combined_ds = load_all_sessions()
     if combined_ds:
         # Convert to pandas and select columns
@@ -215,15 +248,15 @@ def get_sessions_data():
         return pd.DataFrame({"name": [""], "messages": [""], "source_folder": [""]})
 
 def upload_to_huggingface(dataset_name, visibility, filter_tags=None):
-    """Upload sessions to HuggingFace Datasets Hub, optionally filtered by tags
+    """Upload sessions to HuggingFace Datasets Hub, optionally filtered by tags.
     
     Args:
-        dataset_name: Name of the dataset on HuggingFace (format: username/dataset-name)
-        visibility: 'public' or 'private'
-        filter_tags: List of tags to filter by (optional)
+        dataset_name (str): Name of the dataset on HuggingFace (format: username/dataset-name)
+        visibility (str): 'public' or 'private'
+        filter_tags (list, optional): List of tags to filter by
         
     Returns:
-        Status message
+        str: Status message indicating success or failure
     """
     try:
         # Check if HF_TOKEN is available
@@ -315,7 +348,16 @@ def upload_to_huggingface(dataset_name, visibility, filter_tags=None):
         return f"Error uploading to HuggingFace: {str(e)}"
 
 def save_demonstration(log_data, demo_name=None, demo_tags=None):
-    """Save the current tool call logs as a demonstration file using HuggingFace datasets"""
+    """Save the current tool call logs as a demonstration file using HuggingFace datasets.
+    
+    Args:
+        log_data: Tool call log data to save
+        demo_name (str, optional): Name for the demonstration
+        demo_tags (list or str, optional): Tags to associate with the demonstration
+        
+    Returns:
+        str: Status message indicating success or failure
+    """
     global tool_call_logs, session_id
     
     if not tool_call_logs:
@@ -343,6 +385,14 @@ def save_demonstration(log_data, demo_name=None, demo_tags=None):
     log_time = datetime.now().isoformat()
     
     def msg_to_dict(msg: ChatMessage):
+        """Convert ChatMessage to dictionary format.
+        
+        Args:
+            msg (ChatMessage): ChatMessage object to convert
+            
+        Returns:
+            dict: Dictionary representation of the ChatMessage
+        """
         return {
             "role": msg.role,
             "content": str(msg.content),
@@ -392,7 +442,17 @@ def save_demonstration(log_data, demo_name=None, demo_tags=None):
         return f"Error saving demonstration: {str(e)}"
 
 def log_tool_call(name, action, arguments, result=None):
-    """Log a tool call with unique IDs and results"""
+    """Log a tool call with unique IDs and results.
+    
+    Args:
+        name (str): Name of the tool being called
+        action (str): Action being performed
+        arguments (dict): Arguments passed to the tool
+        result (dict, optional): Result returned from the tool call
+        
+    Returns:
+        dict: Log entry that was created and added to the logs
+    """
     global tool_call_logs
     
     # Create arguments JSON that includes the action
@@ -433,7 +493,16 @@ def log_tool_call(name, action, arguments, result=None):
     return log_entry
 
 async def execute(name, action, arguments):
-    """Execute a tool call, log it, and return any results"""
+    """Execute a tool call, log it, and return any results.
+    
+    Args:
+        name (str): Name of the tool to execute
+        action (str): Action to perform with the tool
+        arguments (dict): Arguments to pass to the tool
+        
+    Returns:
+        dict: Results from the tool execution
+    """
     global computer, last_action, last_screenshot, last_screenshot_before
     
     last_screenshot_before = last_screenshot
@@ -529,14 +598,17 @@ async def execute(name, action, arguments):
     return results
 
 async def handle_init_computer(os_choice: str, app_list=None, provider="lume", container_name=None, api_key=None):
-    """Initialize the computer instance and tools for macOS or Ubuntu or Windows
+    """Initialize the computer instance and tools for macOS or Ubuntu or Windows.
     
     Args:
-        os_choice: The OS to use ("macOS" or "Ubuntu" or "Windows")
-        app_list: Optional list of apps to focus on using the app-use experiment
-        provider: The provider to use ("lume" or "self" or "cloud")
-        container_name: The container name to use for cloud provider
-        api_key: The API key to use for cloud provider
+        os_choice (str): The OS to use ("macOS" or "Ubuntu" or "Windows")
+        app_list (list, optional): List of apps to focus on using the app-use experiment
+        provider (str): The provider to use ("lume" or "self" or "cloud")
+        container_name (str, optional): The container name to use for cloud provider
+        api_key (str, optional): The API key to use for cloud provider
+        
+    Returns:
+        tuple: (screenshot image, JSON logs)
     """
     global computer, tool_call_logs, tools
     
@@ -626,7 +698,11 @@ async def handle_init_computer(os_choice: str, app_list=None, provider="lume", c
     return result["screenshot"], json.dumps(tool_call_logs, indent=2)
 
 async def handle_screenshot():
-    """Take a screenshot and return it as a PIL Image"""
+    """Take a screenshot and return it as a PIL Image.
+    
+    Returns:
+        PIL.Image or None: Screenshot image, or None if computer not initialized
+    """
     global computer
     if computer is None:
         return None
@@ -635,7 +711,11 @@ async def handle_screenshot():
     return result["screenshot"]
 
 async def handle_wait():
-    """Wait for 1 second and then take a screenshot"""
+    """Wait for 1 second and then take a screenshot.
+    
+    Returns:
+        tuple: (screenshot image, JSON logs)
+    """
     global computer
     if computer is None:
         return None
@@ -645,7 +725,16 @@ async def handle_wait():
     return result["screenshot"], json.dumps(tool_call_logs, indent=2)
 
 async def handle_click(evt: gr.SelectData, img, click_type):
-    """Handle click events on the image based on click type"""
+    """Handle click events on the image based on click type.
+    
+    Args:
+        evt (gr.SelectData): Gradio select event containing click coordinates
+        img: Current image being displayed
+        click_type (str): Type of click to perform
+        
+    Returns:
+        tuple: (updated screenshot, JSON logs)
+    """
     global computer
     if computer is None:
         return img, json.dumps(tool_call_logs, indent=2)
@@ -660,7 +749,15 @@ async def handle_click(evt: gr.SelectData, img, click_type):
     return result["screenshot"], json.dumps(tool_call_logs, indent=2)
 
 async def handle_type(text, press_enter=False):
-    """Type text into the computer"""
+    """Type text into the computer.
+    
+    Args:
+        text (str): Text to type
+        press_enter (bool): Whether to press enter after typing
+        
+    Returns:
+        tuple: (screenshot image, JSON logs)
+    """
     global computer
     if computer is None or not text:
         return await handle_screenshot(), json.dumps(tool_call_logs, indent=2)
@@ -670,7 +767,11 @@ async def handle_type(text, press_enter=False):
     return result["screenshot"], json.dumps(tool_call_logs, indent=2)
 
 async def handle_copy():
-    """Copy selected content to clipboard and return it"""
+    """Copy selected content to clipboard and return it.
+    
+    Returns:
+        tuple: (clipboard content, JSON logs)
+    """
     global computer
     if computer is None:
         return "Computer not initialized", json.dumps(tool_call_logs, indent=2)
@@ -681,7 +782,14 @@ async def handle_copy():
     return content, json.dumps(tool_call_logs, indent=2)
 
 async def handle_set_clipboard(text):
-    """Set clipboard content"""
+    """Set clipboard content.
+    
+    Args:
+        text (str): Text to set in clipboard
+        
+    Returns:
+        tuple: (status message, JSON logs)
+    """
     global computer
     if computer is None:
         return "Computer not initialized", json.dumps(tool_call_logs, indent=2)
@@ -691,7 +799,14 @@ async def handle_set_clipboard(text):
     return f"Clipboard set to: {text}", json.dumps(tool_call_logs, indent=2)
 
 async def handle_run_command(command):
-    """Run a shell command"""
+    """Run a shell command.
+    
+    Args:
+        command (str): Shell command to execute
+        
+    Returns:
+        tuple: (command output, JSON logs)
+    """
     global computer
     if computer is None:
         return "Computer not initialized", json.dumps(tool_call_logs, indent=2)
@@ -715,7 +830,11 @@ async def handle_run_command(command):
     return output, json.dumps(tool_call_logs, indent=2)
 
 async def handle_shutdown():
-    """Shutdown the computer instance"""
+    """Shutdown the computer instance.
+    
+    Returns:
+        tuple: (status message, JSON logs)
+    """
     global computer
     if computer is None:
         return "Computer not initialized", json.dumps(tool_call_logs, indent=2)
@@ -726,14 +845,29 @@ async def handle_shutdown():
     return "Computer shut down", json.dumps(tool_call_logs, indent=2)
 
 async def handle_memory(memory_text):
-    """Update the global memory"""
+    """Update the global memory.
+    
+    Args:
+        memory_text (str): New memory content to store
+        
+    Returns:
+        str: Status message
+    """
     global memory
     await execute("memory", "update", { "memory_text": memory_text })
     memory = memory_text
     return "Memory updated"
 
 async def update_reasoning(reasoning_text, is_erroneous=False):
-    """Update the reasoning for the last action"""
+    """Update the reasoning for the last action.
+    
+    Args:
+        reasoning_text (str): Reasoning text to add to the last action
+        is_erroneous (bool): Whether to mark the action as erroneous
+        
+    Returns:
+        str: Status message
+    """
     global last_action, tool_call_logs
     
     if not last_action["name"]:
@@ -752,14 +886,22 @@ async def update_reasoning(reasoning_text, is_erroneous=False):
     return "Reasoning updated"
 
 async def clear_log():
-    """Clear the tool call logs"""
+    """Clear the tool call logs.
+    
+    Returns:
+        str: Empty JSON logs
+    """
     global tool_call_logs, screenshot_images
     screenshot_images = []
     tool_call_logs = []
     return json.dumps(tool_call_logs, indent=2)
 
 def get_last_action_display():
-    """Format the last action for display in the reasoning box"""
+    """Format the last action for display in the reasoning box.
+    
+    Returns:
+        str: Formatted string describing the last action
+    """
     global last_action
     if not last_action["name"]:
         return "No actions performed yet"
@@ -775,18 +917,22 @@ def get_last_action_display():
     return action_str
 
 def get_memory():
-    """Get the current memory"""
+    """Get the current memory.
+    
+    Returns:
+        str: Current memory content
+    """
     global memory
     return memory
 
 def get_chatbot_messages(logs=None):
-    """Format chat messages for gr.Chatbot component
+    """Format chat messages for gr.Chatbot component.
     
     Args:
-        logs: Optional list of tool call logs. If None, uses global tool_call_logs.
+        logs (list, optional): List of tool call logs. If None, uses global tool_call_logs.
     
     Returns:
-        List of ChatMessage objects
+        list: List of ChatMessage objects formatted for display
     """
     formatted_messages = []
     
@@ -881,7 +1027,16 @@ def get_chatbot_messages(logs=None):
     return formatted_messages
 
 async def submit_message(message_text, role, screenshot_after=False):
-    """Submit a message with specified role (user or assistant)"""
+    """Submit a message with specified role (user or assistant).
+    
+    Args:
+        message_text (str): Content of the message to submit
+        role (str): Role of the message sender ("user" or "assistant")
+        screenshot_after (bool): Whether to take a screenshot after submitting
+        
+    Returns:
+        tuple: (status message, chat messages, JSON logs, screenshot)
+    """
     global last_screenshot
     
     # Log the message submission and get result (may include screenshot)
@@ -899,6 +1054,11 @@ async def submit_message(message_text, role, screenshot_after=False):
         return f"Message submitted as {role}", get_chatbot_messages(), json.dumps(tool_call_logs, indent=2), last_screenshot
 
 def create_gradio_ui():
+    """Create and configure the Gradio user interface.
+    
+    Returns:
+        gr.Blocks: Configured Gradio application
+    """
     with gr.Blocks() as app:
         gr.Markdown("# Computer Interface Tool")
         
@@ -983,6 +1143,14 @@ def create_gradio_ui():
                                     
                                     # Function to update button text based on selected tags
                                     def get_upload_button_text(selected_tags=None):
+                                        """Generate upload button text based on selected tags.
+                                        
+                                        Args:
+                                            selected_tags (list, optional): List of selected tags to filter by
+                                            
+                                        Returns:
+                                            str: Button text with session count
+                                        """
                                         if not selected_tags:
                                             # Count all sessions
                                             session_folders = glob.glob(os.path.join(SESSION_DIR, "*"))
@@ -1016,6 +1184,14 @@ def create_gradio_ui():
                                     
                                     # Update button text when filter changes
                                     def update_button_text(selected_tags):
+                                        """Update button text based on selected filter tags.
+                                        
+                                        Args:
+                                            selected_tags (list): List of selected tags
+                                            
+                                        Returns:
+                                            str: Updated button text
+                                        """
                                         return get_upload_button_text(selected_tags)
                                     
                                     # Connect filter changes to update button text
@@ -1050,6 +1226,11 @@ def create_gradio_ui():
                                 
                                 # Function to update the demo name with a new random name
                                 def update_random_name():
+                                    """Generate a new random demo name.
+                                    
+                                    Returns:
+                                        str: New random demo name
+                                    """
                                     return generate_random_demo_name()
                                 
                                 # Connect random name button
@@ -1132,6 +1313,14 @@ def create_gradio_ui():
                         
                         # Function to show/hide container name and API key fields based on provider selection
                         def update_cloud_fields_visibility(provider):
+                            """Update visibility of cloud-specific fields based on provider selection.
+                            
+                            Args:
+                                provider (str): Selected provider type
+                                
+                            Returns:
+                                tuple: (container visibility update, API key visibility update)
+                            """
                             show_container = provider == "cloud"
                             show_api_key = provider == "cloud" and not has_cua_key
                             return (
@@ -1234,6 +1423,11 @@ def create_gradio_ui():
         
         # Function to refresh the dataset viewer
         def refresh_dataset_viewer():
+            """Refresh the dataset viewer with current session data.
+            
+            Returns:
+                pd.DataFrame: Updated session data
+            """
             return get_sessions_data()
         
         # Also update the dataset viewer when saving
@@ -1257,11 +1451,24 @@ def create_gradio_ui():
 
         # Function to randomize task
         def randomize_task():
+            """Select a random task from the available examples.
+            
+            Returns:
+                str: Random task text
+            """
             task_dict = random.choice(TASK_EXAMPLES)
             return task_dict["task"]
         
         # Function to run task setup
         async def run_task_setup(task_text):
+            """Run setup function for the specified task.
+            
+            Args:
+                task_text (str): Task text to find and run setup for
+                
+            Returns:
+                tuple: (status message, screenshot, JSON logs)
+            """
             global computer
             
             # Check if computer is initialized
@@ -1315,10 +1522,20 @@ def create_gradio_ui():
         
         # DONE and FAIL buttons just do a placeholder action
         async def handle_done():
+            """Handle the DONE button click.
+            
+            Returns:
+                tuple: (screenshot, JSON logs)
+            """
             output = await execute("computer", "done", {})
             return output["screenshot"], json.dumps(tool_call_logs, indent=2)
         
         async def handle_fail():
+            """Handle the FAIL button click.
+            
+            Returns:
+                tuple: (screenshot, JSON logs)
+            """
             output = await execute("computer", "fail", {})
             return output["screenshot"], json.dumps(tool_call_logs, indent=2)
         
@@ -1327,6 +1544,14 @@ def create_gradio_ui():
         
         # Handle hotkey button
         async def handle_hotkey(selected_keys):
+            """Handle hotkey combination input.
+            
+            Args:
+                selected_keys (list): List of keys to send as hotkey
+                
+            Returns:
+                tuple: (screenshot, JSON logs)
+            """
             if not selected_keys or len(selected_keys) == 0:
                 return await handle_screenshot(), json.dumps(tool_call_logs, indent=2)
             
@@ -1346,7 +1571,15 @@ def create_gradio_ui():
         
         # Define async handler for scrolling
         async def handle_scroll(direction, num_clicks=1):
-            """Scroll the page up or down"""
+            """Scroll the page up or down.
+            
+            Args:
+                direction (str): Direction to scroll ("up" or "down")
+                num_clicks (int): Number of scroll clicks to perform
+                
+            Returns:
+                tuple: (screenshot, JSON logs)
+            """
             global computer
             if computer is None:
                 return None, json.dumps(tool_call_logs, indent=2)
@@ -1398,6 +1631,15 @@ def create_gradio_ui():
         
         # Handle reasoning submission
         async def handle_reasoning_update(reasoning, is_erroneous):
+            """Handle reasoning text submission and update.
+            
+            Args:
+                reasoning (str): Reasoning text to add
+                is_erroneous (bool): Whether to mark as erroneous
+                
+            Returns:
+                tuple: (status message, JSON logs)
+            """
             status = await update_reasoning(reasoning, is_erroneous)
             return status, json.dumps(tool_call_logs, indent=2)
             
@@ -1409,6 +1651,17 @@ def create_gradio_ui():
         
         # Helper function for text refinement - used for all refine buttons
         async def handle_text_refinement(text_content, content_type="reasoning", task_text="", use_before = False):
+            """Handle text refinement using AI assistance.
+            
+            Args:
+                text_content (str): Text content to refine
+                content_type (str): Type of content being refined
+                task_text (str): Current task context
+                use_before (bool): Whether to use the previous screenshot
+                
+            Returns:
+                tuple: (status message, refined text)
+            """
             global last_screenshot, last_action, tool_call_logs, last_screenshot_before
             
             screenshot = last_screenshot_before if use_before else last_screenshot
@@ -1585,12 +1838,39 @@ Provide ONLY the refined text, with no additional commentary or markdown."""
         
         # Define async wrapper functions for each refine button
         async def handle_reasoning_refinement(reasoning, task):
+            """Handle reasoning text refinement.
+            
+            Args:
+                reasoning (str): Reasoning text to refine
+                task (str): Current task context
+                
+            Returns:
+                tuple: (status message, refined reasoning)
+            """
             return await handle_text_refinement(reasoning, "reasoning", task, use_before=True)
 
         async def handle_memory_refinement(memory_text, task):
+            """Handle memory text refinement.
+            
+            Args:
+                memory_text (str): Memory text to refine
+                task (str): Current task context
+                
+            Returns:
+                tuple: (status message, refined memory)
+            """
             return await handle_text_refinement(memory_text, "memory", task)
 
         async def handle_text_input_refinement(text, task):
+            """Handle input text refinement.
+            
+            Args:
+                text (str): Input text to refine
+                task (str): Current task context
+                
+            Returns:
+                tuple: (status message, refined text)
+            """
             return await handle_text_refinement(text, "text", task)
 
         # Connect the refine buttons to the appropriate handlers
@@ -1620,6 +1900,14 @@ Provide ONLY the refined text, with no additional commentary or markdown."""
         
         # Handle memory submission
         async def handle_memory_update(memory_text):
+            """Handle memory content update.
+            
+            Args:
+                memory_text (str): New memory content
+                
+            Returns:
+                tuple: (status message, JSON logs)
+            """
             status = await handle_memory(memory_text)
             return status, json.dumps(tool_call_logs, indent=2)
             
@@ -1631,6 +1919,16 @@ Provide ONLY the refined text, with no additional commentary or markdown."""
         
         # Handle message submission
         async def handle_message_submit(message_content, role, screenshot_after):
+            """Handle message submission with optional screenshot.
+            
+            Args:
+                message_content (str): Content of the message
+                role (str): Role of the message sender
+                screenshot_after (bool): Whether to take screenshot after submission
+                
+            Returns:
+                tuple: (status, chat messages, logs, screenshot)
+            """
             status, chat_messages, logs_json, screenshot = await submit_message(message_content, role, screenshot_after)
             if screenshot:
                 return status, chat_messages, logs_json, screenshot

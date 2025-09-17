@@ -88,9 +88,27 @@ class PIIAnonymizationCallback(AsyncCallbackHandler):
         return deanonymized_output
     
     async def _anonymize_message(self, message: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Anonymize PII content within a single message.
+        
+        Args:
+            message: Message dictionary to anonymize
+            
+        Returns:
+            Message dictionary with PII anonymized
+        """
         # TODO: Implement _anonymize_message
         return message
     
     async def _deanonymize_item(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Restore original PII content in an output item.
+        
+        Args:
+            item: Output item dictionary to deanonymize
+            
+        Returns:
+            Item dictionary with PII restored
+        """
         # TODO: Implement _deanonymize_item
         return item

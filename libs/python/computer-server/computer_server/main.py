@@ -1,6 +1,14 @@
+"""
+FastAPI server for computer automation and control.
+
+This module provides a WebSocket and HTTP API for controlling computer operations
+including mouse/keyboard automation, file system operations, accessibility tree access,
+and screen capture functionality.
+"""
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException, Header
-from fastapi.responses import StreamingResponse, JSONResponse
-from typing import List, Dict, Any, Optional, Union, Literal, cast
+from fastapi.responses import StreamingResponse
+from typing import List, Dict, Any, Optional
 import uvicorn
 import logging
 import asyncio
@@ -14,14 +22,6 @@ import os
 import aiohttp
 import hashlib
 import time
-import platform
-from fastapi.middleware.cors import CORSMiddleware
-
-try:
-    from agent import ComputerAgent
-    HAS_AGENT = True
-except ImportError:
-    HAS_AGENT = False
 
 # Set up logging with more detail
 logger = logging.getLogger(__name__)
@@ -36,16 +36,6 @@ app = FastAPI(
     description="API for the Computer project",
     version="0.1.0",
     websocket_max_size=WEBSOCKET_MAX_SIZE,
-)
-
-# CORS configuration
-origins = ["*"]
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
 )
 
 protocol_version = 1
@@ -112,17 +102,42 @@ handlers = {
 
 
 class AuthenticationManager:
+    """
+    Manages authentication for container-based access control.
+    
+    Handles session caching and validation against the TryCUA API for
+    container name and API key authentication.
+    """
+    
     def __init__(self):
+        """Initialize the authentication manager with empty session cache."""
         self.sessions: Dict[str, Dict[str, Any]] = {}
         self.container_name = os.environ.get("CONTAINER_NAME")
     
     def _hash_credentials(self, container_name: str, api_key: str) -> str:
-        """Create a hash of container name and API key for session identification"""
+        """
+        Create a hash of container name and API key for session identification.
+        
+        Args:
+            container_name: The container name to hash
+            api_key: The API key to hash
+            
+        Returns:
+            str: SHA256 hash of the combined credentials
+        """
         combined = f"{container_name}:{api_key}"
         return hashlib.sha256(combined.encode()).hexdigest()
     
     def _is_session_valid(self, session_data: Dict[str, Any]) -> bool:
-        """Check if a session is still valid based on expiration time"""
+        """
+        Check if a session is still valid based on expiration time.
+        
+        Args:
+            session_data: Dictionary containing session validity and expiration data
+            
+        Returns:
+            bool: True if session is valid and not expired, False otherwise
+        """
         if not session_data.get('valid', False):
             return False
         
@@ -130,7 +145,16 @@ class AuthenticationManager:
         return time.time() < expires_at
     
     async def auth(self, container_name: str, api_key: str) -> bool:
-        """Authenticate container name and API key, using cached sessions when possible"""
+        """
+        Authenticate container name and API key, using cached sessions when possible.
+        
+        Args:
+            container_name: The container name to validate
+            api_key: The API key to validate
+            
+        Returns:
+            bool: True if authentication succeeds, False otherwise
+        """
         # If no CONTAINER_NAME is set, always allow access (local development)
         if not self.container_name:
             logger.info("No CONTAINER_NAME set in environment. Allowing access (local development mode)")
@@ -201,38 +225,53 @@ class AuthenticationManager:
 
 
 class ConnectionManager:
+    """
+    Manages WebSocket connections for the server.
+    
+    Handles connection lifecycle including accepting new connections
+    and cleaning up disconnected clients.
+    """
+    
     def __init__(self):
+        """Initialize the connection manager with an empty connection list."""
         self.active_connections: List[WebSocket] = []
 
     async def connect(self, websocket: WebSocket):
+        """
+        Accept a new WebSocket connection and add it to the active connections list.
+        
+        Args:
+            websocket: The WebSocket connection to accept and manage
+        """
         await websocket.accept()
         self.active_connections.append(websocket)
 
     def disconnect(self, websocket: WebSocket):
+        """
+        Remove a WebSocket connection from the active connections list.
+        
+        Args:
+            websocket: The WebSocket connection to remove
+        """
         self.active_connections.remove(websocket)
 
 
 manager = ConnectionManager()
 auth_manager = AuthenticationManager()
 
-@app.get("/status")
-async def status():
-    sys = platform.system().lower()
-    # get os type
-    if "darwin" in sys or sys == "macos" or sys == "mac":
-        os_type = "macos"
-    elif "windows" in sys:
-        os_type = "windows"
-    else:
-        os_type = "linux"
-    # get computer-server features
-    features = []
-    if HAS_AGENT:
-        features.append("agent")
-    return {"status": "ok", "os_type": os_type, "features": features}
 
 @app.websocket("/ws", name="websocket_endpoint")
 async def websocket_endpoint(websocket: WebSocket):
+    """
+    Handle WebSocket connections for real-time command execution.
+    
+    Manages authentication for cloud deployments and processes incoming
+    commands through the registered handlers. Supports both sync and async
+    command handlers with parameter filtering.
+    
+    Args:
+        websocket: The WebSocket connection to handle
+    """
     global handlers
 
     # WebSocket message size is configured at the app or endpoint level, not on the instance
@@ -364,6 +403,7 @@ async def websocket_endpoint(websocket: WebSocket):
             pass
         manager.disconnect(websocket)
 
+
 @app.post("/cmd")
 async def cmd_endpoint(
     request: Request,
@@ -372,17 +412,20 @@ async def cmd_endpoint(
 ):
     """
     Backup endpoint for when WebSocket connections fail.
-    Accepts commands via HTTP POST with streaming response.
     
-    Headers:
-    - X-Container-Name: Container name for cloud authentication
-    - X-API-Key: API key for cloud authentication
+    Accepts commands via HTTP POST with streaming response and handles
+    authentication for cloud deployments.
     
-    Body:
-    {
-        "command": "command_name",
-        "params": {...}
-    }
+    Args:
+        request: The HTTP request object containing the command data
+        container_name: Container name from X-Container-Name header for cloud authentication
+        api_key: API key from X-API-Key header for cloud authentication
+        
+    Returns:
+        StreamingResponse: Streaming response containing command execution results
+        
+    Raises:
+        HTTPException: For authentication failures, invalid requests, or unknown commands
     """
     global handlers
     
@@ -420,7 +463,12 @@ async def cmd_endpoint(
         raise HTTPException(status_code=400, detail=f"Unknown command: {command}")
     
     async def generate_response():
-        """Generate streaming response for the command execution"""
+        """
+        Generate streaming response for the command execution.
+        
+        Yields:
+            str: JSON-formatted response data as server-sent events
+        """
         try:
             # Filter params to only include those accepted by the handler function
             handler_func = handlers[command]
@@ -452,255 +500,13 @@ async def cmd_endpoint(
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, X-Container-Name, X-API-Key"
         }
     )
 
-@app.post("/responses")
-async def agent_response_endpoint(
-    request: Request,
-    api_key: Optional[str] = Header(None, alias="X-API-Key"),
-):
-    """
-    Minimal proxy to run ComputerAgent for up to 2 turns.
-
-    Security:
-    - If CONTAINER_NAME is set on the server, require X-API-Key
-      and validate using AuthenticationManager unless CUA_ENABLE_PUBLIC_PROXY is true.
-
-    Body JSON:
-    {
-      "model": "...",                 # required
-      "input": "... or messages[]",   # required
-      "agent_kwargs": { ... },         # optional, passed directly to ComputerAgent
-      "env": { ... }                   # optional env overrides for agent
-    }
-    """
-    if not HAS_AGENT:
-        raise HTTPException(status_code=501, detail="ComputerAgent not available")
-    
-    # Authenticate via AuthenticationManager if running in cloud (CONTAINER_NAME set)
-    container_name = os.environ.get("CONTAINER_NAME")
-    if container_name:
-        is_public = os.environ.get("CUA_ENABLE_PUBLIC_PROXY", "").lower().strip() in ["1", "true", "yes", "y", "on"]
-        if not is_public:
-            if not api_key:
-                raise HTTPException(status_code=401, detail="Missing AGENT PROXY auth headers")
-            ok = await auth_manager.auth(container_name, api_key)
-            if not ok:
-                raise HTTPException(status_code=401, detail="Unauthorized")
-
-    # Parse request body
-    try:
-        body = await request.json()
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid JSON body: {str(e)}")
-
-    model = body.get("model")
-    input_data = body.get("input")
-    if not model or input_data is None:
-        raise HTTPException(status_code=400, detail="'model' and 'input' are required")
-
-    agent_kwargs: Dict[str, Any] = body.get("agent_kwargs") or {}
-    env_overrides: Dict[str, str] = body.get("env") or {}
-
-    # Simple env override context
-    class _EnvOverride:
-        def __init__(self, overrides: Dict[str, str]):
-            self.overrides = overrides
-            self._original: Dict[str, Optional[str]] = {}
-        def __enter__(self):
-            for k, v in (self.overrides or {}).items():
-                self._original[k] = os.environ.get(k)
-                os.environ[k] = str(v)
-        def __exit__(self, exc_type, exc, tb):
-            for k, old in self._original.items():
-                if old is None:
-                    os.environ.pop(k, None)
-                else:
-                    os.environ[k] = old
-
-    # Convert input to messages
-    def _to_messages(data: Union[str, List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
-        if isinstance(data, str):
-            return [{"role": "user", "content": data}]
-        if isinstance(data, list):
-            return data
-
-    messages = _to_messages(input_data)
-
-    # Define a direct computer tool that implements the AsyncComputerHandler protocol
-    # and delegates to our existing automation/file/accessibility handlers.
-    from agent.computers import AsyncComputerHandler  # runtime-checkable Protocol
-
-    class DirectComputer(AsyncComputerHandler):
-        def __init__(self):
-            # use module-scope handler singletons created by HandlerFactory
-            self._auto = automation_handler
-            self._file = file_handler
-            self._access = accessibility_handler
-
-        async def get_environment(self) -> Literal["windows", "mac", "linux", "browser"]:
-            sys = platform.system().lower()
-            if "darwin" in sys or sys in ("macos", "mac"):
-                return "mac"
-            if "windows" in sys:
-                return "windows"
-            return "linux"
-
-        async def get_dimensions(self) -> tuple[int, int]:
-            size = await self._auto.get_screen_size()
-            return size["width"], size["height"]
-
-        async def screenshot(self) -> str:
-            img_b64 = await self._auto.screenshot()
-            return img_b64["image_data"]
-
-        async def click(self, x: int, y: int, button: str = "left") -> None:
-            if button == "left":
-                await self._auto.left_click(x, y)
-            elif button == "right":
-                await self._auto.right_click(x, y)
-            else:
-                await self._auto.left_click(x, y)
-
-        async def double_click(self, x: int, y: int) -> None:
-            await self._auto.double_click(x, y)
-
-        async def scroll(self, x: int, y: int, scroll_x: int, scroll_y: int) -> None:
-            await self._auto.move_cursor(x, y)
-            await self._auto.scroll(scroll_x, scroll_y)
-
-        async def type(self, text: str) -> None:
-            await self._auto.type_text(text)
-
-        async def wait(self, ms: int = 1000) -> None:
-            await asyncio.sleep(ms / 1000.0)
-
-        async def move(self, x: int, y: int) -> None:
-            await self._auto.move_cursor(x, y)
-
-        async def keypress(self, keys: Union[List[str], str]) -> None:
-            if isinstance(keys, str):
-                parts = keys.replace("-", "+").split("+") if len(keys) > 1 else [keys]
-            else:
-                parts = keys
-            if len(parts) == 1:
-                await self._auto.press_key(parts[0])
-            else:
-                await self._auto.hotkey(parts)
-
-        async def drag(self, path: List[Dict[str, int]]) -> None:
-            if not path:
-                return
-            start = path[0]
-            await self._auto.mouse_down(start["x"], start["y"])
-            for pt in path[1:]:
-                await self._auto.move_cursor(pt["x"], pt["y"]) 
-            end = path[-1]
-            await self._auto.mouse_up(end["x"], end["y"]) 
-
-        async def get_current_url(self) -> str:
-            # Not available in this server context
-            return ""
-
-        async def left_mouse_down(self, x: Optional[int] = None, y: Optional[int] = None) -> None:
-            await self._auto.mouse_down(x, y, button="left")
-
-        async def left_mouse_up(self, x: Optional[int] = None, y: Optional[int] = None) -> None:
-            await self._auto.mouse_up(x, y, button="left")
-
-    # # Inline image URLs to base64
-    # import base64, mimetypes, requests
-    # # Use a browser-like User-Agent to avoid 403s from some CDNs (e.g., Wikimedia)
-    # HEADERS = {
-    #     "User-Agent": (
-    #         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    #         "AppleWebKit/537.36 (KHTML, like Gecko) "
-    #         "Chrome/124.0.0.0 Safari/537.36"
-    #     )
-    # }
-    # def _to_data_url(content_bytes: bytes, url: str, resp: requests.Response) -> str:
-    #     ctype = resp.headers.get("Content-Type") or mimetypes.guess_type(url)[0] or "application/octet-stream"
-    #     b64 = base64.b64encode(content_bytes).decode("utf-8")
-    #     return f"data:{ctype};base64,{b64}"
-    # def inline_image_urls(messages):
-    #     # messages: List[{"role": "...","content":[...]}]
-    #     out = []
-    #     for m in messages:
-    #         if not isinstance(m.get("content"), list):
-    #             out.append(m)
-    #             continue
-    #         new_content = []
-    #         for part in (m.get("content") or []):
-    #             if part.get("type") == "input_image" and (url := part.get("image_url")):
-    #                 resp = requests.get(url, headers=HEADERS, timeout=30)
-    #                 resp.raise_for_status()
-    #                 new_content.append({
-    #                     "type": "input_image",
-    #                     "image_url": _to_data_url(resp.content, url, resp)
-    #                 })
-    #             else:
-    #                 new_content.append(part)
-    #         out.append({**m, "content": new_content})
-    #     return out
-    # messages = inline_image_urls(messages)
-
-    error = None
-
-    with _EnvOverride(env_overrides):
-        # Prepare tools: if caller did not pass tools, inject our DirectComputer
-        tools = agent_kwargs.get("tools")
-        if not tools:
-            tools = [DirectComputer()]
-            agent_kwargs = {**agent_kwargs, "tools": tools}
-        # Instantiate agent with our tools
-        agent = ComputerAgent(model=model, **agent_kwargs)  # type: ignore[arg-type]
-
-        total_output: List[Any] = []
-        total_usage: Dict[str, Any] = {}
-
-        pending_computer_call_ids = set()
-        try:
-            async for result in agent.run(messages):
-                total_output += result["output"]
-                # Try to collect usage if present
-                if isinstance(result, dict) and "usage" in result and isinstance(result["usage"], dict):
-                    # Merge usage counters
-                    for k, v in result["usage"].items():
-                        if isinstance(v, (int, float)):
-                            total_usage[k] = total_usage.get(k, 0) + v
-                        else:
-                            total_usage[k] = v
-                for msg in result.get("output", []):
-                    if msg.get("type") == "computer_call":
-                        pending_computer_call_ids.add(msg["call_id"])
-                    elif msg.get("type") == "computer_call_output":
-                        pending_computer_call_ids.discard(msg["call_id"])
-                # exit if no pending computer calls
-                if not pending_computer_call_ids:
-                    break
-        except Exception as e:
-            logger.error(f"Error running agent: {str(e)}")
-            logger.error(traceback.format_exc())
-            error = str(e)
-    
-    # Build response payload
-    payload = {
-        "model": model,
-        "error": error,
-        "output": total_output,
-        "usage": total_usage,
-        "status": "completed" if not error else "failed"
-    }
-
-    # CORS: allow any origin
-    headers = {
-        "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
-    }
-
-    return JSONResponse(content=payload, headers=headers)
-
 
 if __name__ == "__main__":
+    """Run the FastAPI server when executed directly."""
     uvicorn.run(app, host="0.0.0.0", port=8000)
